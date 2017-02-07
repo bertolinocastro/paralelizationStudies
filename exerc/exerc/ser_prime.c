@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define LIMIT     32     /* Increase this to find more primes */
+#define LIMIT     1024     /* Increase this to find more primes */
 #define PRINT     100000      /* Print a line after this many numbers */
 
 

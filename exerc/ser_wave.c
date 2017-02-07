@@ -12,11 +12,17 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <omp.h>
+#include <mpi.h>
 
 #define MAXPOINTS 1000
 #define MAXSTEPS 1000
 #define MINPOINTS 20
 #define PI 3.14159265
+
+#define TPOINTS 500
+#define NSTEPS 100
+
 
 void init_param(void);
 void init_line(void);
@@ -36,100 +42,94 @@ double values[MAXPOINTS+2], 	/* values at time t */
  ***************************************************************************/
 void init_param(void)
    {
-   char tchar[8];
+   // char tchar[8];
 
-   /* set number of points, number of iterations */
-   tpoints = 0;
-   nsteps = 0;
-   while ((tpoints < MINPOINTS) || (tpoints > MAXPOINTS)) {
-      printf("Enter number of points along vibrating string [%d-%d]: ",
-             MINPOINTS, MAXPOINTS);
-      scanf("%s", tchar);
-      tpoints = atoi(tchar);
-      if ((tpoints < MINPOINTS) || (tpoints > MAXPOINTS))
-         printf("Invalid. Please enter value between %d and %d\n", 
-                 MINPOINTS, MAXPOINTS);
-      }
-   while ((nsteps < 1) || (nsteps > MAXSTEPS)) {
-      printf("Enter number of time steps [1-%d]: ", MAXSTEPS);
-      scanf("%s", tchar);
-      nsteps = atoi(tchar);
-      if ((nsteps < 1) || (nsteps > MAXSTEPS))
-         printf("Invalid. Please enter value between 1 and %d\n", MAXSTEPS);
-      }
+   // /* set number of points, number of iterations */
+   // tpoints = 0;
+   // nsteps = 0;
+   // while ((tpoints < MINPOINTS) || (tpoints > MAXPOINTS)) {
+   //    printf("Enter number of points along vibrating string [%d-%d]: ",
+   //           MINPOINTS, MAXPOINTS);
+   //    scanf("%s", tchar);
+   //    tpoints = atoi(tchar);
+   //    if ((tpoints < MINPOINTS) || (tpoints > MAXPOINTS))
+   //       printf("Invalid. Please enter value between %d and %d\n", 
+   //               MINPOINTS, MAXPOINTS);
+   //    }
+   // while ((nsteps < 1) || (nsteps > MAXSTEPS)) {
+   //    printf("Enter number of time steps [1-%d]: ", MAXSTEPS);
+   //    scanf("%s", tchar);
+   //    nsteps = atoi(tchar);
+   //    if ((nsteps < 1) || (nsteps > MAXSTEPS))
+   //       printf("Invalid. Please enter value between 1 and %d\n", MAXSTEPS);
+   //    }
 
-   printf("Using points = %d, steps = %d\n", tpoints, nsteps);
+   // printf("Using points = %d, steps = %d\n", tpoints, nsteps);
+
+   tpoints = TPOINTS;
+   nsteps  = NSTEPS;
 
    }
 
 /***************************************************************************
  *     Initialize points on line
  **************************************************************************/
-void init_line(void)
-   {
+void init_line(void){
    int i, j;
    double x, fac, k, tmp;
 
-   /* Calculate initial values based on sine curve */
    fac = 2.0 * PI;
    k = 0.0; 
    tmp = tpoints - 1;
-   for (j = 1; j <= tpoints; j++) {
-      x = k/tmp;
-      values[j] = sin (fac * x);
-      k = k + 1.0;
-      } 
+   #pragma omp parallel for schedule(runtime) private(j) ordered
+      for (j = 1; j <= tpoints; j++) {
+         x = k/tmp;
+         values[j] = sin (fac * x);
+         k = k + 1.0;
+      }
 
-   /* Initialize old values array */
+   #pragma omp parallel for private(i) schedule(dynamic)
    for (i = 1; i <= tpoints; i++) 
       oldval[i] = values[i];
-   }
+}
 
 /***************************************************************************
  *      Calculate new values using wave equation
  **************************************************************************/
 void do_math(int i)
    {
-   double dtime, c, dx, tau, sqtau;
+   register const double dtime = 0.3,
+                         c     = 1.0,
+                         dx    = 1.0;
+                  double sqtau, tau;
 
-   dtime = 0.3;
-   c = 1.0;
-   dx = 1.0;
    tau = (c * dtime / dx);
    sqtau = tau * tau;
    newval[i] = (2.0 * values[i]) - oldval[i] 
                + (sqtau * (values[i-1] - (2.0 * values[i]) + values[i+1]));
    }
 
-/***************************************************************************
- *     Update all values along line a specified number of times
- **************************************************************************/
-void update()
-   {
+void update(){
    int i, j;
 
-   /* Update values for each time step */
+   #pragma omp parallel for schedule(dynamic) private(i,j)
    for (i = 1; i<= nsteps; i++) {
-      /* Update points along line for this time step */
-      for (j = 1; j <= tpoints; j++) {
-         /* global endpoints */
-         if ((j == 1) || (j  == tpoints))
-            newval[j] = 0.0;
-         else
-            do_math(j);
-         }
+        #pragma omp parallel for schedule(dynamic) private(j)
+        for (j = 1; j <= tpoints; j++) {
+            if ((j == 1) || (j  == tpoints))
+                newval[j] = 0.0;
+            else
+                do_math(j);
+        }
 
-      /* Update old values with new values */
-      for (j = 1; j <= tpoints; j++) {
-         oldval[j] = values[j];
-         values[j] = newval[j];
-         }
-      }
-   }
+        #pragma omp parallel for schedule(dynamic) private(j)
+        for (j = 1; j <= tpoints; j++) {
+            oldval[j] = values[j];
+            values[j] = newval[j];
+        }
+    }
+}
 
-/***************************************************************************
- *     Print final results
- **************************************************************************/
 void printfinal()
    {
    int i;
@@ -140,22 +140,28 @@ void printfinal()
       }
    }
 
-/***************************************************************************
- *	Main program
- **************************************************************************/
 int main(int argc, char *argv[])
 {
 /*
 int left, right;
 */
+   int rank, size;
 
-printf("Starting serial version of wave equation...\n");
-init_param();
-printf("Initializing points on the line...\n");
-init_line();
-printf("Updating all points for all time steps...\n");
-update();
-printf("Printing final results...\n");
-printfinal();
-printf("\nDone.\n\n");
+   MPI_Init(&argc, &argv);
+
+      MPI_Comm_rank( MPI_COMM_WORLD, &rank );
+      MPI_Comm_size( MPI_COMM_WORLD, &size );
+
+      printf("Starting serial version of wave equation...\n");
+      init_param();
+      printf("Initializing points on the line...\n");
+      init_line();
+      printf("Updating all points for all time steps...\n");
+      update();
+      printf("Printing final results...\n");
+      printfinal();
+      printf("\nDone.\n\n");
+
+   MPI_Finalize();
+   return 0;
 }
