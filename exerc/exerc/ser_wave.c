@@ -12,11 +12,15 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <omp.h>
 
-#define MAXPOINTS 1000
-#define MAXSTEPS 1000
+#define MAXPOINTS 100
+#define MAXSTEPS  1000000
 #define MINPOINTS 20
 #define PI 3.14159265
+
+#define TPOINTS   100
+#define NSTEPS    1000000
 
 void init_param(void);
 void init_line(void);
@@ -36,29 +40,33 @@ double values[MAXPOINTS+2], 	/* values at time t */
  ***************************************************************************/
 void init_param(void)
    {
-   char tchar[8];
+   // char tchar[8];
 
-   /* set number of points, number of iterations */
-   tpoints = 0;
-   nsteps = 0;
-   while ((tpoints < MINPOINTS) || (tpoints > MAXPOINTS)) {
-      printf("Enter number of points along vibrating string [%d-%d]: ",
-             MINPOINTS, MAXPOINTS);
-      scanf("%s", tchar);
-      tpoints = atoi(tchar);
-      if ((tpoints < MINPOINTS) || (tpoints > MAXPOINTS))
-         printf("Invalid. Please enter value between %d and %d\n", 
-                 MINPOINTS, MAXPOINTS);
-      }
-   while ((nsteps < 1) || (nsteps > MAXSTEPS)) {
-      printf("Enter number of time steps [1-%d]: ", MAXSTEPS);
-      scanf("%s", tchar);
-      nsteps = atoi(tchar);
-      if ((nsteps < 1) || (nsteps > MAXSTEPS))
-         printf("Invalid. Please enter value between 1 and %d\n", MAXSTEPS);
-      }
+   // /* set number of points, number of iterations */
+   // tpoints = 0;
+   // nsteps = 0;
+   // while ((tpoints < MINPOINTS) || (tpoints > MAXPOINTS)) {
+   //    printf("Enter number of points along vibrating string [%d-%d]: ",
+   //           MINPOINTS, MAXPOINTS);
+   //    scanf("%s", tchar);
+   //    tpoints = atoi(tchar);
+   //    if ((tpoints < MINPOINTS) || (tpoints > MAXPOINTS))
+   //       printf("Invalid. Please enter value between %d and %d\n", 
+   //               MINPOINTS, MAXPOINTS);
+   //    }
+   // while ((nsteps < 1) || (nsteps > MAXSTEPS)) {
+   //    printf("Enter number of time steps [1-%d]: ", MAXSTEPS);
+   //    scanf("%s", tchar);
+   //    nsteps = atoi(tchar);
+   //    if ((nsteps < 1) || (nsteps > MAXSTEPS))
+   //       printf("Invalid. Please enter value between 1 and %d\n", MAXSTEPS);
+   //    }
 
-   printf("Using points = %d, steps = %d\n", tpoints, nsteps);
+   // printf("Using points = %d, steps = %d\n", tpoints, nsteps);
+
+   tpoints = TPOINTS;
+   nsteps  = NSTEPS;
+
 
    }
 
@@ -81,20 +89,29 @@ void init_line(void)
       } 
 
    /* Initialize old values array */
+    //   double tes1, tes2;
+    // tes1 = omp_get_wtime();
+
    for (i = 1; i <= tpoints; i++) 
       oldval[i] = values[i];
-   }
 
+
+      // tes2 = omp_get_wtime();
+
+      //   printf("Custo copia vetores %f\n", (tes2-tes1));
+
+      //   exit(0);
+   }
 /***************************************************************************
  *      Calculate new values using wave equation
  **************************************************************************/
 void do_math(int i)
    {
-   double dtime, c, dx, tau, sqtau;
+   register const double dtime = 0.3,
+                         c     = 1.0,
+                         dx    = 1.0;
+                  double sqtau, tau;
 
-   dtime = 0.3;
-   c = 1.0;
-   dx = 1.0;
    tau = (c * dtime / dx);
    sqtau = tau * tau;
    newval[i] = (2.0 * values[i]) - oldval[i] 
@@ -149,13 +166,14 @@ int main(int argc, char *argv[])
 int left, right;
 */
 
-printf("Starting serial version of wave equation...\n");
 init_param();
-printf("Initializing points on the line...\n");
-init_line();
-printf("Updating all points for all time steps...\n");
-update();
-printf("Printing final results...\n");
+    double start = omp_get_wtime();
+    for(int i = 0; i < 1000; ++i)
+        init_line(),
+        update();
+    double end = omp_get_wtime();
 printfinal();
-printf("\nDone.\n\n");
+
+    printf("\n\n\nTempo gasto %.7F\n", end-start);
+
 }

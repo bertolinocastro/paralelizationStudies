@@ -13,111 +13,216 @@
  ****************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
-#define NXPROB 100
-#define NYPROB 100
+#include <omp.h>
+#include <mpi.h>
 
-struct Parms
-{ 
-  float cx;
-  float cy;
-  int nts;
-} parms = {0.1, 0.1, 100};
+struct Parms{
+	float cx;
+	float cy;
+	long int nts;
+} parms = {0.1, 0.1, 10000};
 
-int main(int argc, char *argv[])
-{
-float u[2][NXPROB][NYPROB];
-int ix, iy, iz, it;
-void inidat(), prtdat(), update();
+int main(int argc, char *argv[]){
+	
+	float *u;
+	long unsigned ix, iy, it;
+	int  z;
+	void inidat(), prtdat();
+	long unsigned tamx, tamy;
 
-printf("Starting serial version of 2D heat example...\n");
-printf("Using [%d][%d] grid.\n",NXPROB, NYPROB);
+	if( argc != 3 ) exit(1);
 
-/* Initialize grid and create input file */
-printf("Initializing grid and creating input file:");
-inidat(NXPROB, NYPROB, u);
-prtdat(NXPROB, NYPROB, u, "initial.dat");
-for (ix = 0; ix <= NXPROB-1; ix++) {
-   u[1][ix][0] = u[0][ix][0];
-   u[1][ix][NYPROB-1] = u[0][ix][NYPROB-1];
-   }
-for (iy = 0; iy <= NYPROB-1; iy++) {
-   u[1][0][iy] = u[0][0][iy];
-   u[1][NXPROB-1][iy] = u[0][NXPROB-1][iy];
-   }
+	tamx = strtol( argv[1], NULL, 10 );
+	tamy = strtol( argv[2], NULL, 10 );
 
-/* Iterate over all timesteps and create output file */
-printf("Iterating over %d time steps...\n",parms.nts);
-iz = 0;
-for (it = 1; it <= parms.nts; it++) {
-   update(NXPROB, NYPROB, &u[iz][0][0], &u[1-iz][0][0]);
-   iz = 1 - iz;
-   }
-printf("Done. Created output file: ");
-prtdat(NXPROB, NYPROB, &u[iz][0][0], "final.dat");
+	// tamx*tamy
+
+	u = malloc( 2*tamx*tamy*sizeof(*u) );
+	if(!u) exit(1);
+	// for (int i = 0; i < 2; ++i){
+	// 	u[i] = malloc( tamx*szeof(**u) );
+	// 	if(!u[i]) exit(1);
+	// 	for (int j = 0; j < tamx; ++j){
+	// 		u[i][j] = malloc( tamy*szeof(***u) );
+	// 		if(!u[i][j]) exit(1);
+	// 	}
+	// }
+
+
+
+
+
+
+
+
+
+
+
+
+	printf("Using [%lu][%lu] grid.\n",tamx, tamy);
+
+	inidat(tamx, tamy, u);
+	 prtdat(tamx, tamy, u);
+ // prtdat(tamx, tamy, (u+tamx*tamy));
+
+	for(ix = 0; ix < tamy; ix++){
+		u[(tamx*tamy)+ix*tamx] = u[ix*tamx];
+		u[(tamx*tamy)+ix*tamx+tamx-1] = u[ix*tamx+tamx-1];
+	}
+
+	for(iy = 0; iy < tamx; iy++){
+		u[(tamx*tamy)+iy] = u[iy];
+		u[(tamx*tamy)+(tamy-1)*tamx+iy] = u[(tamy-1)*tamx+iy];
+	}
+ 
+ // prtdat(tamx, tamy, (u+tamx*tamy));
+
+
+// tamx colunas 
+// tamy linhas
+
+// tamx*tamy celulas // por matrz
+
+// tamx*i // escolhe linha
+
+// tamy*j // escolhe coluna
+
+
+
+
+
+
+
+
+
+	double start = omp_get_wtime();
+	z = 0;
+	long unsigned i, j;
+	for(it = 1; it <= parms.nts; it++){
+		#pragma omp parallel for num_threads(3) firstprivate(z) private(i,j) schedule(dynamic)
+		//{
+		// 	int th = omp_get_thread_num();
+		// 	int tt = omp_get_num_threads();
+			// printf("Th %d TT %d\n", th, tt);
+				 // #pragma omp for schedule(static) private(ix,iy, ij)
+					// for (ix = 1; ix < tamx-1; ix++) {
+					//     for (iy = 1; iy < tamy-1; iy++) {
+					//         u[!z][ix][iy] = u[z][ix][iy]  + 
+					//         parms.cx * (u[z][ix+1][iy] + u[z][ix-1][iy] - 
+					//         2.0 * u[z][ix][iy]) +
+					//         parms.cy * (u[z][ix][iy+1] + u[z][ix][iy-1] - 
+					//         2.0 * u[z][ix][iy]);
+					//     }
+					// }
+
+
+
+
+			// for(i ; i < x;++i ){
+			// 	for (j; j < y; ++j){
+			// 		(m + z*(tamx*tamy) + i*tamx + j) posicao geral do espaco
+			// 	}
+			// }
+
+
+			for(i = 1; i < tamx-1; ++i){
+				for (j = 1; j < tamy-1; ++j){
+					*(u + (!z)*tamx*tamy + i*tamx + j) = *(u + z*tamx*tamy + i*tamx + j) + 
+						parms.cx * (*(u + z*tamx*tamy + (i+1)*tamx + j) + *(u + z*tamx*tamy + (i-1)*tamx + j) - 2.0*(*(u + z*tamx*tamy + i*tamx + j))) + 
+						parms.cy * (*(u + z*tamx*tamy + i*tamx + j+1) + *(u + z*tamx*tamy + i*tamx + j-1) - 2.0*(*(u + z*tamx*tamy + i*tamx + j)));
+				}
+			}
+
+
+
+
+
+
+					// for(ij = th; ij < xy; ij+=tt){
+					// 	ix = ij/limx+1;
+					// 	iy = ij%limy+1;
+					// 	//printf("th %3d ij: %5lu ix: %5lu iy: %5lu\n", th, ij, ix, iy);
+					// 	u[!z*(tamx*tamy)+ix*tamy+iy] = u[z*(tamx*tamy)+ix*tamx+iy]  + 
+					// 	    parms.cx * (u[z*(tamx*tamy)+(ix+1)*tamx+iy] + u[z*(tamx*tamy)+(ix-1)*tamx+iy] - 
+					// 	    2.0 * u[z*(tamx*tamy)+ix*tamx+iy]) +
+					// 	    parms.cy * (u[z*(tamx*tamy)+ix*tamx+iy+1] + u[z*(tamx*tamy)+ix*tamx+iy-1] - 
+					// 	    2.0 * u[z*(tamx*tamy)+ix*tamx+iy]);
+			// }
+		//}	
+		z = !z;
+	}
+	
+	
+	double end = omp_get_wtime();
+
+
+
+
+
+
+
+
+
+
+
+
+	printf("\n\n\n");
+	prtdat(tamx, tamy, (u + z*(tamx*tamy)));
+
+	printf("Tempo total: %F\n", end-start );
+
+	// for (int i = 0; i < 2; ++i){
+	// 	for (int j = 0; j < tamx; ++j)
+	// 		free( u[i][j] );
+	// 	free( u[i] );
+	// }
+	free( u );
+	return 0;
 }
 
 
-/****************************************************************************
- *  subroutine update
- ****************************************************************************/
-void
-update(nx, ny, u1, u2)
-int nx, ny;
-float *u1, *u2;
-{
-   int ix, iy;
 
-   for (ix = 1; ix <= nx-2; ix++) {
-      for (iy = 1; iy <= ny-2; iy++) {
-         *(u2+ix*ny+iy) = *(u1+ix*ny+iy)  + 
-         parms.cx * (*(u1+(ix+1)*ny+iy) + *(u1+(ix-1)*ny+iy) - 
-         2.0 * *(u1+ix*ny+iy)) +
-         parms.cy * (*(u1+ix*ny+iy+1) + *(u1+ix*ny+iy-1) - 
-         2.0 * *(u1+ix*ny+iy));
-         }
-      }
-}
 
-/*****************************************************************************
- *  subroutine inidat
- *****************************************************************************/
-void
-inidat(nx, ny, u1)
-int nx, ny;
-/*float u1[nx][ny];*/
+
+
+
+
+
+
+
+
+void inidat( tamx, tamy, u1 )
+long unsigned tamx, tamy;
 float *u1;
 {
-   int ix, iy;
+	int ix, iy;
 
-   for (ix = 0; ix <= nx-1; ix++) 
-      for (iy = 0; iy <= ny-1; iy++) 
-         *(u1+ix*ny+iy) = (float)(ix * (nx - ix - 1) * iy * (ny - iy - 1));
+	for (ix = 0; ix < tamx; ix++) 
+		for (iy = 0; iy < tamy; iy++) 
+			u1[ix*tamx+iy] = (float)(ix * (tamx - ix - 1) * iy * (tamy - iy - 1));
 }
 
-/**************************************************************************
- * subroutine prtdat
- **************************************************************************/
 void
-prtdat(nx, ny, u1, fnam)
-int nx, ny;
+prtdat(tamx, tamy, u1)
+long unsigned tamx, tamy;
 float *u1;
-char *fnam;
 {
-   int ix, iy;
-   FILE *fp;
+   long unsigned i, j;
+   // FILE *fp;
 
-   fp = fopen(fnam, "w");
-   for (iy = ny-1; iy >= 0; iy--) {
-      for (ix = 0; ix <= nx-1; ix++) {
-        fprintf(fp, "%8.3f", *(u1+ix*ny+iy));
-        if (ix != nx-1) {
-           fprintf(fp, " ");
-           }
-       else {
-          fprintf(fp, "\n");
-          }
-       }
-    }
-   fclose(fp);
-   printf(" %s\n",fnam);
+	// fp = fopen(fnam, "w");
+	for (j = 0; j < tamy; ++j) {
+		for (i = 0; i < tamx; ++i) {
+			printf("%g", *(u1 + i*tamx + j) );
+			// printf("i %lu j%lu\t", i, j);
+			if (i != tamx-1){
+				printf(" ");
+			}else{
+				printf("\n");
+			}
+		}
+	}
+
+	// fclose(fp);
+	// printf(" %s\n",fnam);
 }
