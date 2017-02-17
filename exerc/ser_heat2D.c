@@ -128,8 +128,8 @@ int main(int argc, char *argv[]){
 			for(i = 1; i < tamx-1; ++i){
 				for (j = 1; j < tamy-1; ++j){
 					*(u + (!z)*tamx*tamy + i*tamx + j) = *(u + z*tamx*tamy + i*tamx + j) + 
-						parms.cx * (*(u + z*tamx*tamy + (i+1)*tamx + j) + *(u + z*tamx*tamy + (i-1)*tamx + j) - 2.0*(*(u + z*tamx*tamy + i*tamx + j))) + 
-						parms.cy * (*(u + z*tamx*tamy + i*tamx + j+1) + *(u + z*tamx*tamy + i*tamx + j-1) - 2.0*(*(u + z*tamx*tamy + i*tamx + j)));
+						parms.cx * (*(u + z*tamx*tamy + (i)*tamx + j+1) + *(u + z*tamx*tamy + (i)*tamx + j+1) - 2.0*(*(u + z*tamx*tamy + i*tamx + j))) + 
+						parms.cy * (*(u + z*tamx*tamy + (i+1)*tamx + j) + *(u + z*tamx*tamy + (i-1)*tamx + j) - 2.0*(*(u + z*tamx*tamy + i*tamx + j)));
 				}
 			}
 
@@ -211,8 +211,8 @@ float *u1;
    // FILE *fp;
 
 	// fp = fopen(fnam, "w");
-	for (j = 0; j < tamy; ++j) {
-		for (i = 0; i < tamx; ++i) {
+	for (j = 0; j < tamx; ++j) {
+		for (i = 0; i < tamy; ++i) {
 			printf("%g", *(u1 + i*tamx + j) );
 			// printf("i %lu j%lu\t", i, j);
 			if (i != tamx-1){

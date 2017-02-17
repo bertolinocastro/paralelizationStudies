@@ -67,15 +67,16 @@ int main(int argc, char* argv[]){
 	      for(j=4;j<dim-4;j++){
 	        for(k=4;k<dim-4;k++){
 	            heat[t0][i][j][k] = C0 * heat[t1][i][j][k] + C1 * (heat[t1][i+1][j][k] + heat[t1][i-1][j][k] + heat[t1][i][j+1][k] + heat[t1][i][j-1][k] + heat[t1][i][j][k+1] + heat[t1][i][j][k-1])
-							   + C2 * (heat[t1][i+2][j][k] + heat[t1][i-2][j][k] + heat[t1][i][j+2][k] + heat[t1][i][j-2][k] + heat[t1][i][j][k+2] + heat[t1][i][j][k-2]);
-							   + C3 * (heat[t1][i+3][j][k] + heat[t1][i-3][j][k] + heat[t1][i][j+3][k] + heat[t1][i][j-3][k] + heat[t1][i][j][k+3] + heat[t1][i][j][k-3]);
+							   + C2 * (heat[t1][i+2][j][k] + heat[t1][i-2][j][k] + heat[t1][i][j+2][k] + heat[t1][i][j-2][k] + heat[t1][i][j][k+2] + heat[t1][i][j][k-2])
+							   + C3 * (heat[t1][i+3][j][k] + heat[t1][i-3][j][k] + heat[t1][i][j+3][k] + heat[t1][i][j-3][k] + heat[t1][i][j][k+3] + heat[t1][i][j][k-3])
 							   + C4 * (heat[t1][i+4][j][k] + heat[t1][i-4][j][k] + heat[t1][i][j+4][k] + heat[t1][i][j-4][k] + heat[t1][i][j][k+4] + heat[t1][i][j][k-4]);
 	        }
 	      }
 	    }
 	}
 	tf_sec = get_time(FIM);
-	printf("Time elapsed: %.3f seg\n",tf_sec);
+	printf("Time elapsed: %.10f seg\n",tf_sec);
+	write_output(heat_, dim, t0);
 
 	free(heat_);
 
@@ -99,23 +100,23 @@ float get_time(int mode){
 
 int write_output(float *heat_, int dim, int timestep){
  
- FILE *fff;
+ // FILE *fff;
  int i,j,k;
  float (*heat)[dim][dim][dim] = (float (*)[dim][dim][dim]) heat_;
  
- fff = fopen("output.txt","w");
- if (fff==NULL){
-   printf("Error! Não foi possível abrir o arquivo para saída.\n");
-   return 1;
- }
+ // fff = fopen("output.txt","w");
+ // if (fff==NULL){
+ //   printf("Error! Não foi possível abrir o arquivo para saída.\n");
+ //   return 1;
+ // }
 
  for(i=0;i<dim;i++){
    for(j=0;j<dim;j++){
      for(k=0;k<dim;k++){
-	fprintf(fff,"%f ",heat[timestep][i][j][k]);
-     }
+		printf("i %d j %d k %d heat %g\n",i,j,k,heat[timestep][i][j][k]);
+	}
    }
  }
- fclose(fff);
+ // fclose(fff);
  return 0;
 }
