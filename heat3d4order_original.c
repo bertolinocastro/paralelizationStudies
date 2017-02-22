@@ -10,7 +10,7 @@
 #define INICIO 1
 #define FIM 2
 
-int write_output(float *, int, int);
+int write_output(long double *, int, int);
 float get_time(int);
 
 struct timeval inicio, final;
@@ -19,7 +19,7 @@ int main(int argc, char* argv[]){
 
 	int niter,dim,save;
 	int t,i,j,k,t0,t1;
-	float *heat_, tf_sec;
+	long double *heat_; float tf_sec;
 
 	//executei /a.out 2 16 2
 	if(argc < 4){
@@ -34,14 +34,14 @@ int main(int argc, char* argv[]){
 	printf("Número de iterações %d\ndimensão %d salvo a cada %d timesteps\n",niter,dim,save);
 	#endif
 
-	heat_ = (float*) malloc(sizeof(float)*2*dim*dim*dim);
+	heat_ = (long double*) malloc(sizeof(long double)*2*dim*dim*dim);
 
 	if(heat_ == NULL){
 	    printf("Error! Malloc fail\n");
 	    exit(1);
 	}
 
-	float (*heat)[dim][dim][dim] = (float (*)[dim][dim][dim]) heat_;
+	long double (*heat)[dim][dim][dim] = (long double (*)[dim][dim][dim]) heat_;
 
 	#ifdef VERBOSE
 	printf("Inicializando matriz!\n");
@@ -98,11 +98,11 @@ float get_time(int mode){
  return tf_sec;
 }
 
-int write_output(float *heat_, int dim, int timestep){
+int write_output(long double *heat_, int dim, int timestep){
  
  // FILE *fff;
  int i,j,k;
- float (*heat)[dim][dim][dim] = (float (*)[dim][dim][dim]) heat_;
+ long double (*heat)[dim][dim][dim] = (long double (*)[dim][dim][dim]) heat_;
  
  // fff = fopen("output.txt","w");
  // if (fff==NULL){
@@ -113,7 +113,8 @@ int write_output(float *heat_, int dim, int timestep){
  for(i=0;i<dim;i++){
    for(j=0;j<dim;j++){
      for(k=0;k<dim;k++){
-		printf("i %d j %d k %d heat %g\n",i,j,k,heat[timestep][i][j][k]);
+		// printf("i %d j %d k %d heat %g\n",i,j,k,heat[timestep][i][j][k]);
+		printf("%LG\n",heat[timestep][i][j][k]);
 	}
    }
  }

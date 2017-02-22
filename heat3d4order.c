@@ -3,6 +3,7 @@
 #include <sys/time.h>
 #include <omp.h>
 #include <mpi.h>
+#include <math.h>
 
 #define C0 0.5
 #define C1 0.75
@@ -17,13 +18,15 @@
 int write_output(float *, int, int);
 float get_time(int);
 
+void printfcomma (long long unsigned n);
+
 struct timeval inicio, final;
 
 int main(int argc, char* argv[]){
 
-	int niter,dim,num_th, altura;
-	int t,i,j,k,t0,t1;
-	float *heat_, tf_sec;
+	int niter,dim,num_th;
+	int t,i,j,k,t0,t1; long long unsigned ini, fim, altura, resto;
+	long double *heat_/*, tf_sec*/;
 
 	MPI_Init( &argc, &argv );
 
@@ -32,13 +35,16 @@ int main(int argc, char* argv[]){
 		MPI_Comm_rank( MPI_COMM_WORLD, &rank );
 		MPI_Comm_size( MPI_COMM_WORLD, &size );
 
-		MPI_Request request[size];
-		MPI_Status status[size];
+		MPI_Request request1[size], request2[size];
+		MPI_Status 	status1[size], 	status2[size];
+
+		MPI_Group 	grupo_seleto;
+		MPI_Comm 	comm_seleto;
 
 		//executei /a.out 2 16 2
 		if(argc < 4){
 			printf("Error! informe o número de iterações e o tamanho da matriz. i.e: ./executavel 1000 500 500\n");
-			exit(1);
+			MPI_Abort( MPI_COMM_WORLD, -1 );
 		}
 		niter 	= atoi(argv[1]);
 		dim 	= atoi(argv[2]);
@@ -46,41 +52,100 @@ int main(int argc, char* argv[]){
 
 		omp_set_num_threads( num_th );
 
+		altura = dim/size;
+
+		/*
+		 *
+		 *	Verificar se a altura e menor que quatro, se sim, diminuir numero de processos.
+		 *
+		 *
+		 */
+
+		if( altura < 4 ){
+
+			int h = size - 1;
+			while( dim/h < 4 ) h--;
+
+			printf("Numero de processos alto demais! Serao destruidos %d.\n", size - h);
+
+			MPI_Comm_group(MPI_COMM_WORLD, &grupo_seleto);
+
+			MPI_Group_range_excl(grupo_seleto, 1, &(int[3]){h, size-1,1}, &grupo_seleto);
+
+			MPI_Comm_create(MPI_COMM_WORLD, grupo_seleto, &comm_seleto);
+
+		}else{
+
+			MPI_Comm_group(MPI_COMM_WORLD, &grupo_seleto);
+
+			MPI_Comm_create(MPI_COMM_WORLD, grupo_seleto, &comm_seleto);
+
+
+		}
+
+		if( comm_seleto == MPI_COMM_NULL ){
+			MPI_Finalize();
+			exit(0);
+		}
+
+		MPI_Comm_rank( comm_seleto, &rank );
+		MPI_Comm_size( comm_seleto, &size );
+
+		altura = dim/size;
+		resto = dim%size;
+
+
 		/*
 		*	Criacao do passo vertical: divisao da dimensao pelo size.
 		*	Ex.: dim == 20 & size == 4 => alt == (5 p/proc.)+4
 		*/
 
-		if(!rank){
-			inicio = 0;
-			fim = altura + 4;
-		}else if(rank == size-1){
-			inicio = 4; // Equivalente a 0
-			fim = inicio + altura;
+		if( size > 1 ){
+			if(!rank){
+				ini = 0;
+				fim = 0 + altura + 4;
+			}else if(rank == size-1){
+				ini = 4;
+				fim = 4 + altura + 0 + resto;
+			}else{
+				ini = 4;
+				fim = 4 + altura + 4;
+			}
 		}else{
-			inicio = 4; // equivalente a 0;
-			fim = inicio + altura;
+			ini = 0;
+			fim = altura;
 		}
+		
+
+
+		/*
+		 *
+		 *	Definicao dos processos vizinhos
+		 *
+		 */
+
+		int left 	= (!rank)		 ? MPI_PROC_NULL : rank - 1,
+			right 	= (rank==size-1) ? MPI_PROC_NULL : rank + 1;
+
+
 
 		// altura_central = (dim/size);
 
 		// altura_superior = altura_central-4;
 		// altura_inferior = altura_central+4;
 
-		if(floor((float)dim/size)!=(float)dim/size)	printf("VALOR DE ALTURA NAO DIVISIVEL. FALTA IMPLEMENTAR.\n");
+		//if(floor((float)dim/size)!=(float)dim/size){ inexato = 1; printf("VALOR DE ALTURA NAO DIVISIVEL. FALTA IMPLEMENTAR.\n"); MPI_Abort( MPI_COMM_WORLD, -1 ); }
 
-		heat_ = (float*) malloc(sizeof(float)*2*(fim+4)*dim*dim);
-		if(heat_ == NULL){ printf("Error! Malloc fail\n"); exit(1); }
+		heat_ = (long double*) malloc(sizeof(long double)*2*fim*dim*dim);
+		if(heat_ == NULL){ printf("Error! Malloc fail\n"); MPI_Abort( comm_seleto, -1 ); }
 
-
-
-		float (*heat)[altura_inferior][dim][dim] = (float (*)[altura_inferior][dim][dim]) heat_;
+		long double (*heat)[fim][dim][dim] = (long double (*)[fim][dim][dim]) heat_;
 
 		#pragma omp parallel for schedule(dynamic) private(i,j,k)
-		for(i=0;i<altura_inferior;i++){
+		for(i=0;i<fim;i++){
 			for(j=0;j<dim;j++){
 				for(k=0;k<dim;k++){
-					heat[1][i][j][k] = heat[0][i][j][k] = 1;
+					heat[1][i][j][k] = heat[0][i][j][k] = 1.0f;
 				}
 			}
 		}
@@ -92,41 +157,22 @@ int main(int argc, char* argv[]){
 
 		// }else if(rank==size-1){
 
-		// 	MPI_Isend(&heat[inicio][0][0], 4*dim*dim, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, request[rank]);
-		// 	MPI_Recv(&heat[inicio-4][0][0], 4*dim*dim, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, status[rank]);
+		// 	MPI_Isend(&heat[ini][0][0], 4*dim*dim, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, request[rank]);
+		// 	MPI_Recv(&heat[ini-4][0][0], 4*dim*dim, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, status[rank]);
 
 		// }else{
 
 		// 	//Enviando parcela propria ao antecessor
-		// 	MPI_Isend(&heat[inicio][0][0], 4*dim*dim, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, request[rank]);
+		// 	MPI_Isend(&heat[ini][0][0], 4*dim*dim, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, request[rank]);
 		// 	//Enviando parcela propria ao sucessor
 		// 	MPI_Isend(&heat[fim-4][0][0], 4*dim*dim, MPI_FLOAT, rank+1, 0, MPI_COMM_WORLD, request[rank]);
 
 		// 	//Recebendo parcela do antecessor
-		// 	MPI_Recv(&heat[inicio-4][0][0], 4*dim*dim, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, request[rank]);
+		// 	MPI_Recv(&heat[ini-4][0][0], 4*dim*dim, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, request[rank]);
 		// 	//Recebendo parcela do sucessor
 		// 	MPI_Recv(&heat[fim][0][0], 4*dim*dim, MPI_FLOAT, rank+1, 0, MPI_COMM_WORLD, request[rank]);
 		
 		// }
-
-		if( rank )
-		//Enviando parcela propria ao antecessor
-		MPI_Isend(&heat[inicio][0][0], 4*dim*dim, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, request[rank]);
-
-		if( rank != size-1 )
-		//Enviando parcela propria ao sucessor
-		MPI_Isend(&heat[fim-4][0][0], 4*dim*dim, MPI_FLOAT, rank+1, 0, MPI_COMM_WORLD, request[rank]);
-
-		if( rank )
-		//Recebendo parcela do antecessor
-		MPI_Recv(&heat[inicio-4][0][0], 4*dim*dim, MPI_FLOAT, rank-1, 0, MPI_COMM_WORLD, request[rank]);
-	
-		if( rank != size-1 )
-		//Recebendo parcela do sucessor
-		MPI_Recv(&heat[fim][0][0], 4*dim*dim, MPI_FLOAT, rank+1, 0, MPI_COMM_WORLD, request[rank]);
-
-
-
 
 
 /*
@@ -143,15 +189,20 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag,
 
 */
 
-		get_time(INICIO);
+		printf("Sou o proc %d com ini %llu fim %llu altura %llu e resto %llu\n", rank, ini, fim, altura, resto),
+		printf("Sou o proc %d e meu heat_ consome ", rank), printfcomma(sizeof(*heat)/8), printf("B de memoria\n");
+
+		//printf("Oi, sou o processo %d e estou antes do loop principal!\n\n", rank);
+
+		//get_time(INICIO);
+
+		double start = MPI_Wtime();
 		for(t=1; t<niter+1; t++){
 			t0 = (t % 2);
 			t1 = (t0 + 1)%(2);
-			
-
 
 			#pragma omp parallel for schedule(runtime) private(i,j,k)
-			for(i=4;i<altura_inferior-4;i++){
+			for(i=4;i<fim-4;i++){
 			  for(j=4;j<dim-4;j++){
 				for(k=4;k<dim-4;k++){
 					heat[t0][i][j][k] = C0 * heat[t1][i][j][k]
@@ -162,11 +213,24 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag,
 				}
 			  }
 			}
+
+			MPI_Isend(&heat[t0][4][0][0], 4*dim*dim, MPI_LONG_DOUBLE, left, 0, comm_seleto, &request1[rank]);
+			MPI_Isend(&heat[t0][ini+altura-4][0][0], 4*dim*dim, MPI_LONG_DOUBLE, right, 1, comm_seleto, &request2[rank]);
+
+
+			MPI_Recv(&heat[t0][0][0][0], 4*dim*dim, MPI_LONG_DOUBLE, left, 1, comm_seleto, &status1[rank]);
+
+			MPI_Recv(&heat[t0][ini+altura][0][0], 4*dim*dim, MPI_LONG_DOUBLE, right, 0, comm_seleto, &status2[rank]);
+
+			/* RETIRAR O MPI_WAIT AUMENTA EM 30% O CUSTO TEMPORAL */
+			MPI_Wait(&request1[rank], &status1[rank]);
+			MPI_Wait(&request2[rank], &status2[rank]);
+
 		}
-		tf_sec = get_time(FIM);
 
+		double end = MPI_Wtime();
 
-
+		//tf_sec = get_time(FIM);
 
 
 		// get_time(INICIO);
@@ -190,19 +254,64 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag,
 		// 	}
 		// }
 
-		// /*
-		// *	Tentativa de segmentar o cubo em cubos menores com base no numero de threads
-		// */
-
-
-
 
 		// tf_sec = get_time(FIM);
-		printf("Time elapsed: %.10f seg\n",tf_sec);
-		//write_output( heat_, dim, t0 );
+		//printf("Time elapsed: %.10f seg\n",tf_sec);
+
+		printf("Time elapsed: %.10f seg\n", end-start);
+		MPI_Barrier( comm_seleto );
+
+		if( size < 2 )
+			// Printando o proprio
+			for(unsigned int m=0;m<fim;m++){
+				for(j=0;j<dim;j++){
+					for(k=0;k<dim;k++){
+						// printf("i %d j %d k %d heat %g\n",m,j,k,heat[t0][m][j][k]);
+						printf("%LG\n",heat[t0][m][j][k]);
+
+					}
+				}
+			}
+		else if( !rank ){
+			unsigned int m;
+			// Printando o proprio
+			for(m=0;m<fim-4;m++){
+				for(j=0;j<dim;j++){
+					for(k=0;k<dim;k++){
+						// printf("i %d j %d k %d heat %g\n",m,j,k,heat[t0][m][j][k]);
+						printf("%LG\n",heat[t0][m][j][k]);
+
+					}
+				}
+			}
+
+			heat_ = (long double*) realloc( heat_, sizeof(long double)*(altura+8+resto)*dim*dim );
+			if( !heat_ ){ printf("Problema no realloc para impressao!\n"); MPI_Abort( MPI_COMM_WORLD, -1 ); }
+
+			long double (*vetor)[altura+8+resto][dim][dim] = (long double (*)[altura+8+resto][dim][dim]) heat_;
+
+			for( int l = 1; l < size; l++ ){
+				unsigned int topo = ( l != size-1 ? altura+8 : altura + 4 + resto );
+				unsigned int tipo = ( l != size-1 ? 4 : 0 );
+
+				MPI_Recv( &vetor[0][0][0][0], dim*dim*topo, MPI_LONG_DOUBLE, l, 10+l, MPI_COMM_WORLD, &status1[0] );
+				//printf("Recebido do rank %d topo vale: %u\n", l, topo);
+				for(i=4;i<topo-tipo;i++,m++){
+					for(j=0;j<dim;j++){
+						for(k=0;k<dim;k++){
+							// printf("i %d j %d k %d heat %g\n",m,j,k,vetor[t0][i][j][k]);
+							printf("%LG\n",vetor[t0][i][j][k]);
+						}
+					}
+				}
+
+			}
+
+		}else{
+			MPI_Send( &heat[t0][0][0][0], fim*dim*dim, MPI_LONG_DOUBLE, 0, 10+rank, MPI_COMM_WORLD );
+		}
 
 		free(heat_);
-
 
 	MPI_Finalize();
 
@@ -245,4 +354,21 @@ int write_output(float *heat_, int dim, int timestep){
 	}
 	// fclose(fff);
 	return 0;
+}
+
+void printfcomma2 (int n) {
+    if (n < 1000) {
+        printf ("%d", n);
+        return;
+    }
+    printfcomma2 (n/1000);
+    printf (",%03d", n%1000);
+}
+
+void printfcomma (long long unsigned n) {
+    if (n < 0) {
+        printf ("-");
+        n = -n;
+    }
+    printfcomma2 (n);
 }
